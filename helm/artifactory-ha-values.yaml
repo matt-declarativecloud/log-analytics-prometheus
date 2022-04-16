@@ -1,18 +1,16 @@
 installerInfo: '{ "productId": "Helm_prometheus_artifactory/{{ .Chart.Version }}", "features": [ { "featureId": "ArtifactoryVersion/{{ default .Chart.AppVersion .Values.artifactory.image.version }}" }, { "featureId": "{{ if .Values.postgresql.enabled }}postgresql{{ else }}{{ .Values.database.type }}{{ end }}/0.0.0" }, { "featureId": "Platform/{{ default "kubernetes" .Values.installer.platform }}" },  { "featureId": "Channel/Helm_prometheus_artifactory" } ] }'
 artifactory:
   customInitContainersBegin: |
+    volumes:
+    - name: fluentd-sidecar-configmap
+      configMap:
+        name: "artifactory-fluentd-sidecar-configmap"
     - name: "prepare-fluentd-conf-on-persistent-volume"
       image: "{{ .Values.initContainerImage }}"
       imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
-      command:
-        - 'sh'
-        - '-c'
-        - >
-          mkdir -p {{ .Values.artifactory.persistence.mountPath }}/etc/fluentd/;
-          curl https://raw.githubusercontent.com/jfrog/log-analytics-prometheus/master/fluent.conf.rt -o {{ .Values.artifactory.persistence.mountPath }}/etc/fluentd/fluentd.conf
       volumeMounts:
-        - mountPath: "{{ .Values.artifactory.persistence.mountPath }}"
-          name: volume
+        - mountPath: {{ .Values.artifactory.persistence.mountPath }}/etc/fluentd/fluentd.conf
+          name: fluentd-sidecar-configmap     
   customSidecarContainers: |
     - name: "artifactory-fluentd-sidecar"
       image: "partnership-public-images.jfrog.io/fluentd/fluentd:1.13.2"
@@ -31,49 +29,10 @@ artifactory:
 ## For an example, refer - https://github.com/jfrog/log-analytics-prometheus
 additionalResources: |
   apiVersion: v1
-  kind: Service
+  kind: ConfigMap
   metadata:
-    name: {{ template "artifactory-ha.fullname" . }}-metrics
-    annotations:
-      prometheus.io/path: "/metrics"
-      prometheus.io/scheme: "http"
-      prometheus.io/port: "24231"
-      prometheus.io/scrape: "true"
-    labels:
-      app: {{ template "artifactory-ha.name" . }}
-      chart: {{ template "artifactory-ha.chart" . }}
-      component: metrics
-      heritage: {{ .Release.Service }}
-      release: {{ .Release.Name }}
-      {{- with .Values.artifactory.labels }}
-  {{ toYaml . | indent 4 }}
-      {{- end }}
-  spec:
-    type: ClusterIP
-    ports:
-    - name: metrics
-      port: 24231
-      protocol: TCP
-    selector:
-      app: {{ template "artifactory-ha.name" . }}
-      component: "{{ .Values.artifactory.name }}"
-      release: {{ .Release.Name }}
-  ---
-  apiVersion: monitoring.coreos.com/v1
-  kind: ServiceMonitor
-  metadata:
-    name: servicemonitor-{{ template "artifactory-ha.name" . }}
-    labels:
-      metrics: jfrog
-      app: {{ template "artifactory-ha.name" . }}
-      chart: {{ template "artifactory-ha.chart" . }}
-      heritage: {{ .Release.Service }}
-      release: {{ .Release.Name }}
-  spec:
-    selector:
-      matchLabels:
-        app: {{ template "artifactory-ha.name" . }}
-        component: metrics
-    endpoints:
-        - port: metrics
-          interval: 15s
+    name: "artifactory-fluentd-sidecar-configmap"
+  data:
+    fluent.conf.rt: |-
+  {{ .Files.Get "fluent.conf.stdout.rt" | indent 4}}
+ 
