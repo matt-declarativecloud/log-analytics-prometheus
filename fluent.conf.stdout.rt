@@ -13,6 +13,13 @@
   </parse>
 </source>
 
+<filter jfrog.rt.artifactory.request>
+  @type record_transformer
+  <record>
+    log "artifactory-request.log"
+  </record>
+</filter>
+
 <match jfrog.rt.artifactory.request>
   @type stdout
   <format>
