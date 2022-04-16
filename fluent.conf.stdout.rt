@@ -29,4 +29,7 @@
 
 <match jfrog.rt.artifactory.request>
   @type stdout
+  <format>
+    @type json
+  </format>
 </match>
